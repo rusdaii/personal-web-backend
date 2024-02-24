@@ -44,126 +44,138 @@ class ProjectService {
   }
 
   static async createProject({ payload }) {
-    return await prisma.$transaction(async (tx) => {
-      const skills = await Promise.all(
-        payload.skills.map(async (skill) => {
-          return await tx.skill.upsert({
-            where: {
-              name: skill,
-            },
+    return await prisma.$transaction(
+      async (tx) => {
+        const skills = await Promise.all(
+          payload.skills.map(async (skill) => {
+            return await tx.skill.upsert({
+              where: {
+                name: skill,
+              },
 
-            create: {
-              name: skill,
-            },
-            update: {},
-          });
-        })
-      );
+              create: {
+                name: skill,
+              },
+              update: {},
+            });
+          })
+        );
 
-      let imageUrl = undefined;
+        let imageUrl = undefined;
 
-      if (payload?.image) {
-        ({ secure_url: imageUrl } = await CloudinaryStorage.upload(
-          payload.image,
-          {
-            folder: folderStorage.cloudinary.PROJECT_IMAGE,
-          }
-        ));
+        if (payload?.image) {
+          ({ secure_url: imageUrl } = await CloudinaryStorage.upload(
+            payload.image,
+            {
+              folder: folderStorage.cloudinary.PROJECT_IMAGE,
+            }
+          ));
+        }
+
+        const newProject = await tx.project.create({
+          data: {
+            name: payload.name,
+            description: payload.description,
+            image: imageUrl,
+            demo: payload.demo,
+            github: payload.github,
+          },
+        });
+
+        await tx.projectSkill.createMany({
+          data: skills.map((skill) => ({
+            projectId: newProject.id,
+            skillId: skill.id,
+          })),
+        });
+
+        return newProject;
+      },
+      {
+        maxWait: 5000,
+        timeout: 10000,
       }
-
-      const newProject = await tx.project.create({
-        data: {
-          name: payload.name,
-          description: payload.description,
-          image: imageUrl,
-          demo: payload.demo,
-          github: payload.github,
-        },
-      });
-
-      await tx.projectSkill.createMany({
-        data: skills.map((skill) => ({
-          projectId: newProject.id,
-          skillId: skill.id,
-        })),
-      });
-
-      return newProject;
-    });
+    );
   }
 
   static async updateProject({ id, payload }) {
-    return await prisma.$transaction(async (tx) => {
-      const project = await tx.project.findFirst({
-        where: {
-          id,
-        },
-      });
+    return await prisma.$transaction(
+      async (tx) => {
+        const project = await tx.project.findFirst({
+          where: {
+            id,
+          },
+        });
 
-      if (!project) {
-        throw new NotFoundError('Project not found');
-      }
+        if (!project) {
+          throw new NotFoundError('Project not found');
+        }
 
-      await tx.projectSkill.deleteMany({
-        where: {
-          projectId: project.id,
-        },
-      });
+        await tx.projectSkill.deleteMany({
+          where: {
+            projectId: project.id,
+          },
+        });
 
-      const skills = await Promise.all(
-        payload.skills.map(async (skill) => {
-          return await tx.skill.upsert({
-            where: {
-              name: skill,
-            },
-            update: {},
-            create: {
-              name: skill,
-            },
-          });
-        })
-      );
+        const skills = await Promise.all(
+          payload.skills.map(async (skill) => {
+            return await tx.skill.upsert({
+              where: {
+                name: skill,
+              },
+              update: {},
+              create: {
+                name: skill,
+              },
+            });
+          })
+        );
 
-      await tx.projectSkill.createMany({
-        data: skills.map((skill) => ({
-          projectId: project.id,
-          skillId: skill.id,
-        })),
-      });
+        await tx.projectSkill.createMany({
+          data: skills.map((skill) => ({
+            projectId: project.id,
+            skillId: skill.id,
+          })),
+        });
 
-      let imageUrl = undefined;
+        let imageUrl = undefined;
 
-      if (payload?.image) {
-        ({ secure_url: imageUrl } = await CloudinaryStorage.upload(
-          payload.image,
-          {
-            folder: folderStorage.cloudinary.PROJECT_IMAGE,
-          }
-        ));
-      }
+        if (payload?.image) {
+          ({ secure_url: imageUrl } = await CloudinaryStorage.upload(
+            payload.image,
+            {
+              folder: folderStorage.cloudinary.PROJECT_IMAGE,
+            }
+          ));
+        }
 
-      const updatedProject = await tx.project.update({
-        where: {
-          id,
-        },
-        data: {
-          name: payload.name,
-          description: payload.description,
-          demo: payload.demo,
-          github: payload.github,
-          image: imageUrl,
-        },
-        include: {
-          skills: {
-            include: {
-              Skill: true,
+        const updatedProject = await tx.project.update({
+          where: {
+            id,
+          },
+          data: {
+            name: payload.name,
+            description: payload.description,
+            demo: payload.demo,
+            github: payload.github,
+            image: imageUrl,
+          },
+          include: {
+            skills: {
+              include: {
+                Skill: true,
+              },
             },
           },
-        },
-      });
+        });
 
-      return this.projectMapping(updatedProject);
-    });
+        return this.projectMapping(updatedProject);
+      },
+      {
+        maxWait: 5000,
+        timeout: 10000,
+      }
+    );
   }
 
   static async deleteProject(id) {
