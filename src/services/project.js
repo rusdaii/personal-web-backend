@@ -24,6 +24,9 @@ class ProjectService {
 
   static async getProjects() {
     const projects = await prisma.project.findMany({
+      orderBy: {
+        createdAt: 'desc',
+      },
       include: {
         skills: {
           select: {
